@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Logo Downloader</title>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f4f5f7;
+      color: #1a1a2e;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #fff;
+      border-bottom: 1px solid #e2e5ea;
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header h1 { font-size: 1.25rem; font-weight: 700; }
+    header span { color: #6b7280; font-size: 0.875rem; }
+
+    .container { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+
+    /* ---- STEP 1 ---- */
+    .card {
+      background: #fff;
+      border: 1px solid #e2e5ea;
+      border-radius: 12px;
+      padding: 32px;
+    }
+    .card h2 { font-size: 1.1rem; margin-bottom: 8px; }
+    .card p { color: #6b7280; font-size: 0.875rem; margin-bottom: 20px; }
+
+    textarea {
+      width: 100%;
+      height: 180px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 0.9rem;
+      resize: vertical;
+      outline: none;
+      transition: border-color .15s;
+    }
+    textarea:focus { border-color: #6366f1; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 22px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 600;
+      transition: opacity .15s, background .15s;
+    }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-primary { background: #6366f1; color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #4f52d4; }
+    .btn-success { background: #10b981; color: #fff; }
+    .btn-success:hover:not(:disabled) { background: #059669; }
+    .btn-outline { background: #fff; color: #374151; border: 1px solid #d1d5db; }
+    .btn-outline:hover:not(:disabled) { background: #f9fafb; }
+    .btn-sm { padding: 6px 14px; font-size: 0.8rem; }
+
+    /* ---- STEP 2 ---- */
+    .loading-box {
+      text-align: center;
+      padding: 60px 20px;
+    }
+    .spinner {
+      width: 44px; height: 44px;
+      border: 4px solid #e2e5ea;
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .progress-bar-wrap {
+      background: #e2e5ea;
+      border-radius: 99px;
+      height: 6px;
+      max-width: 400px;
+      margin: 16px auto 0;
+      overflow: hidden;
+    }
+    .progress-bar { height: 100%; background: #6366f1; border-radius: 99px; transition: width .3s; }
+
+    /* ---- STEP 3 — Review ---- */
+    .review-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .company-row {
+      background: #fff;
+      border: 1px solid #e2e5ea;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 14px;
+    }
+    .company-name {
+      font-weight: 700;
+      font-size: 1rem;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .domain-chip {
+      background: #f3f4f6;
+      color: #6b7280;
+      font-size: 0.75rem;
+      font-weight: 500;
+      padding: 2px 8px;
+      border-radius: 99px;
+    }
+
+    .candidates-grid {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .candidate-card {
+      border: 2px solid #e2e5ea;
+      border-radius: 10px;
+      padding: 12px;
+      width: 160px;
+      cursor: pointer;
+      transition: border-color .15s, box-shadow .15s;
+      position: relative;
+      background: #fafafa;
+    }
+    .candidate-card:hover { border-color: #a5b4fc; }
+    .candidate-card.selected { border-color: #6366f1; background: #eef2ff; box-shadow: 0 0 0 3px #c7d2fe; }
+    .candidate-card.unreachable { opacity: .45; cursor: not-allowed; }
+    .candidate-card.unreachable:hover { border-color: #e2e5ea; }
+
+    .candidate-thumb {
+      width: 100%;
+      height: 90px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f3f4f6;
+      border-radius: 6px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+    .candidate-thumb img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    .thumb-placeholder { color: #9ca3af; font-size: 0.75rem; }
+
+    .candidate-source {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .candidate-meta {
+      font-size: 0.7rem;
+      color: #9ca3af;
+      margin-bottom: 5px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 99px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: .03em;
+    }
+    .badge-excellent { background: #d1fae5; color: #065f46; }
+    .badge-good      { background: #dbeafe; color: #1e40af; }
+    .badge-fair      { background: #fef3c7; color: #92400e; }
+    .badge-poor      { background: #fee2e2; color: #991b1b; }
+    .badge-bad       { background: #f3f4f6; color: #6b7280; }
+
+    .alpha-icon { font-size: 0.7rem; color: #059669; }
+
+    .not-found-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(255,255,255,.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      font-size: 0.72rem;
+      color: #9ca3af;
+      font-weight: 600;
+    }
+
+    .custom-url-row {
+      margin-top: 12px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .custom-url-row input {
+      flex: 1;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 0.8rem;
+      outline: none;
+    }
+    .custom-url-row input:focus { border-color: #6366f1; }
+
+    /* ---- STEP 4 — Export ---- */
+    .export-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-top: 24px;
+    }
+    @media (max-width: 600px) { .export-grid { grid-template-columns: 1fr; } }
+
+    .export-card {
+      background: #fff;
+      border: 1px solid #e2e5ea;
+      border-radius: 12px;
+      padding: 28px;
+      text-align: center;
+    }
+    .export-card h3 { font-size: 1rem; margin-bottom: 6px; }
+    .export-card p { color: #6b7280; font-size: 0.82rem; margin-bottom: 18px; }
+    .export-icon { font-size: 2.5rem; margin-bottom: 12px; }
+
+    .size-select {
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-size: 0.82rem;
+      margin-bottom: 14px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .summary-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+    .summary-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #fff;
+      border: 1px solid #e2e5ea;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 0.82rem;
+    }
+    .summary-thumb {
+      width: 32px; height: 32px;
+      object-fit: contain;
+      background: #f3f4f6;
+      border-radius: 4px;
+    }
+
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      color: #6366f1;
+      font-size: 0.85rem;
+      cursor: pointer;
+      text-decoration: underline;
+      margin-bottom: 20px;
+    }
+
+    .step-indicator {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 24px;
+    }
+    .step-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #d1d5db;
+    }
+    .step-dot.active { background: #6366f1; }
+    .step-dot.done { background: #10b981; }
+  </style>
+</head>
+<body x-data="app()" x-init="init()">
+
+  <header>
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+      <rect width="28" height="28" rx="7" fill="#6366f1"/>
+      <path d="M7 14l5 5 9-9" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <h1>Logo Downloader</h1>
+    <span>Masowe pobieranie logotypów</span>
+  </header>
+
+  <div class="container">
+
+    <!-- Step indicators -->
+    <div class="step-indicator" x-show="step > 0">
+      <template x-for="i in [1,2,3,4]">
+        <div class="step-dot" :class="{ active: step === i, done: step > i }"></div>
+      </template>
+    </div>
+
+    <!-- ===== STEP 1: INPUT ===== -->
+    <div x-show="step === 1" class="card">
+      <h2>Wpisz nazwy firm</h2>
+      <p>Jedna firma na linię. Aplikacja automatycznie znajdzie logo z 3 źródeł dla każdej firmy.</p>
+      <textarea
+        x-model="companiesText"
+        placeholder="Apple&#10;Nike&#10;Stripe&#10;OpenAI&#10;Spotify"
+      ></textarea>
+      <div style="margin-top:16px; display:flex; gap:10px; align-items:center;">
+        <button class="btn btn-primary" @click="startSearch()" :disabled="!companiesText.trim()">
+          <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+          </svg>
+          Szukaj logo
+        </button>
+        <span x-show="companiesText.trim()" style="color:#6b7280;font-size:.85rem" x-text="companiesText.trim().split('\n').filter(l=>l.trim()).length + ' firm'"></span>
+      </div>
+    </div>
+
+    <!-- ===== STEP 2: LOADING ===== -->
+    <div x-show="step === 2" class="loading-box">
+      <div class="spinner"></div>
+      <p style="font-weight:600;font-size:1rem" x-text="loadingMsg"></p>
+      <p style="color:#9ca3af;font-size:.85rem;margin-top:6px" x-text="progressText"></p>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar" :style="`width:${progressPct}%`"></div>
+      </div>
+    </div>
+
+    <!-- ===== STEP 3: REVIEW ===== -->
+    <div x-show="step === 3">
+      <div class="review-header">
+        <div>
+          <h2 style="font-size:1.1rem;font-weight:700">Wybierz logo dla każdej firmy</h2>
+          <p style="color:#6b7280;font-size:.85rem;margin-top:2px">Najlepsze logo zostało wstępnie zaznaczone. Możesz zmienić wybór lub podać własny URL.</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-outline btn-sm" @click="step=1">
+            ← Wróć
+          </button>
+          <button class="btn btn-primary" @click="goToExport()" :disabled="selectedCount === 0">
+            Eksportuj (<span x-text="selectedCount"></span>)
+          </button>
+        </div>
+      </div>
+
+      <template x-for="(row, ri) in results" :key="ri">
+        <div class="company-row">
+          <div class="company-name">
+            <span x-text="row.company"></span>
+            <span class="domain-chip" x-text="row.domain_guess"></span>
+          </div>
+
+          <div class="candidates-grid">
+            <template x-for="(c, ci) in row.allCandidates" :key="c.id">
+              <div
+                class="candidate-card"
+                :class="{
+                  selected: row.selectedId === c.id,
+                  unreachable: !c.reachable && c.assessed
+                }"
+                @click="selectCandidate(ri, c.id)"
+              >
+                <div class="candidate-thumb">
+                  <template x-if="c.thumbnail_b64">
+                    <img :src="c.thumbnail_b64" :alt="c.label" />
+                  </template>
+                  <template x-if="!c.thumbnail_b64 && c.assessed">
+                    <span class="thumb-placeholder">Brak</span>
+                  </template>
+                  <template x-if="!c.assessed">
+                    <div class="spinner" style="width:24px;height:24px;border-width:3px;margin:0"></div>
+                  </template>
+                </div>
+                <div class="candidate-source" x-text="c.label"></div>
+                <template x-if="c.assessed && c.reachable">
+                  <div>
+                    <div class="candidate-meta" x-text="(c.width && c.height) ? c.width+'×'+c.height+' '+c.format : ''"></div>
+                    <span class="badge" :class="badgeClass(c.quality_label)" x-text="c.quality_label"></span>
+                    <span x-show="c.has_transparency" class="alpha-icon" title="Przezroczystość"> ✓α</span>
+                  </div>
+                </template>
+                <template x-if="!c.reachable && c.assessed">
+                  <div class="not-found-overlay">Nie znaleziono</div>
+                </template>
+              </div>
+            </template>
+          </div>
+
+          <!-- Custom URL -->
+          <div class="custom-url-row">
+            <input
+              type="text"
+              placeholder="Własny URL logo..."
+              x-model="row.customUrl"
+              @keydown.enter="addCustom(ri)"
+            />
+            <button class="btn btn-outline btn-sm" @click="addCustom(ri)" :disabled="!row.customUrl?.trim()">Dodaj</button>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <!-- ===== STEP 4: EXPORT ===== -->
+    <div x-show="step === 4">
+      <span class="back-link" @click="step=3">← Wróć do wyboru</span>
+
+      <h2 style="font-size:1.1rem;font-weight:700;margin-bottom:6px">Gotowe do eksportu</h2>
+      <p style="color:#6b7280;font-size:.85rem;margin-bottom:20px" x-text="selectedCount + ' logotypów wybranych'"></p>
+
+      <!-- Thumbnails summary -->
+      <div class="summary-list">
+        <template x-for="item in exportItems" :key="item.company">
+          <div class="summary-item">
+            <img x-show="item.thumb" :src="item.thumb" class="summary-thumb" />
+            <span x-text="item.company"></span>
+          </div>
+        </template>
+      </div>
+
+      <div class="export-grid">
+        <!-- ZIP -->
+        <div class="export-card">
+          <div class="export-icon">📦</div>
+          <h3>Pobierz ZIP</h3>
+          <p>Wszystkie logo w jednym archiwum, nazwy plików = nazwy firm.</p>
+          <button class="btn btn-primary" @click="downloadZip()" :disabled="exporting">
+            <span x-show="!exporting">Pobierz ZIP</span>
+            <span x-show="exporting">Pobieranie...</span>
+          </button>
+        </div>
+
+        <!-- PPTX -->
+        <div class="export-card">
+          <div class="export-icon">📊</div>
+          <h3>Pobierz PPTX</h3>
+          <p>Prezentacja PowerPoint — jedno logo na slajd z nazwą firmy.</p>
+          <div>
+            <select class="size-select" x-model="logoWidthCm">
+              <option value="3">Małe (3 cm)</option>
+              <option value="5" selected>Średnie (5 cm)</option>
+              <option value="8">Duże (8 cm)</option>
+              <option value="12">Bardzo duże (12 cm)</option>
+            </select>
+          </div>
+          <button class="btn btn-success" @click="downloadPptx()" :disabled="exporting">
+            <span x-show="!exporting">Pobierz PPTX</span>
+            <span x-show="exporting">Pobieranie...</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /container -->
+
+<script>
+function app() {
+  return {
+    step: 1,
+    companiesText: '',
+    results: [],
+    loadingMsg: '',
+    progressText: '',
+    progressPct: 0,
+    logoWidthCm: '5',
+    exporting: false,
+
+    init() {},
+
+    get selectedCount() {
+      return this.results.filter(r => r.selectedId).length;
+    },
+
+    get exportItems() {
+      return this.results
+        .filter(r => r.selectedId)
+        .map(r => {
+          const cand = r.allCandidates.find(c => c.id === r.selectedId);
+          return {
+            company: r.company,
+            url: cand?.url || '',
+            thumb: cand?.thumbnail_b64 || null,
+          };
+        });
+    },
+
+    async startSearch() {
+      const lines = this.companiesText.trim().split('\n').map(l => l.trim()).filter(Boolean);
+      if (!lines.length) return;
+
+      this.step = 2;
+      this.loadingMsg = 'Szukam domen i URL-i logo...';
+      this.progressPct = 5;
+      this.progressText = '';
+
+      // Step 1: get candidate URLs
+      let searchRes;
+      try {
+        const r = await fetch('/api/logos/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ companies: lines }),
+        });
+        searchRes = await r.json();
+      } catch (e) {
+        alert('Błąd połączenia z serwerem.');
+        this.step = 1;
+        return;
+      }
+
+      this.results = searchRes.results.map(r => ({
+        company: r.company,
+        domain_guess: r.domain_guess,
+        allCandidates: r.candidates.map(c => ({ ...c, assessed: false, reachable: false })),
+        selectedId: null,
+        customUrl: '',
+      }));
+
+      // Step 2: assess all candidates
+      const totalCandidates = this.results.reduce((s, r) => s + r.allCandidates.length, 0);
+      let done = 0;
+      this.loadingMsg = `Sprawdzam jakość logo...`;
+      this.progressPct = 10;
+
+      const allItems = [];
+      for (const row of this.results) {
+        for (const c of row.allCandidates) {
+          allItems.push({ candidate_id: c.id, company: row.company, url: c.url });
+        }
+      }
+
+      // Assess in batches of 15 for responsive UI
+      const BATCH = 15;
+      for (let i = 0; i < allItems.length; i += BATCH) {
+        const batch = allItems.slice(i, i + BATCH);
+        try {
+          const r = await fetch('/api/logos/assess', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items: batch }),
+          });
+          const data = await r.json();
+          for (const assessment of data.assessments) {
+            this._applyAssessment(assessment);
+            done++;
+          }
+        } catch (e) {
+          done += batch.length;
+        }
+        this.progressPct = 10 + Math.round((done / totalCandidates) * 85);
+        this.progressText = `${done} / ${totalCandidates} sprawdzonych`;
+      }
+
+      // Auto-select best per company
+      for (const row of this.results) {
+        const reachable = row.allCandidates.filter(c => c.reachable);
+        if (reachable.length) {
+          const best = reachable.reduce((a, b) => (b.quality_score > a.quality_score ? b : a));
+          row.selectedId = best.id;
+        }
+      }
+
+      this.progressPct = 100;
+      this.step = 3;
+    },
+
+    _applyAssessment(a) {
+      for (const row of this.results) {
+        const idx = row.allCandidates.findIndex(c => c.id === a.candidate_id);
+        if (idx !== -1) {
+          row.allCandidates[idx] = { ...row.allCandidates[idx], ...a, assessed: true };
+          return;
+        }
+      }
+    },
+
+    selectCandidate(rowIdx, candidateId) {
+      const row = this.results[rowIdx];
+      const cand = row.allCandidates.find(c => c.id === candidateId);
+      if (cand && (!cand.assessed || cand.reachable)) {
+        row.selectedId = candidateId;
+      }
+    },
+
+    async addCustom(rowIdx) {
+      const row = this.results[rowIdx];
+      const url = (row.customUrl || '').trim();
+      if (!url) return;
+
+      const candidateId = `custom_${rowIdx}_${Date.now()}`;
+      const newCand = {
+        id: candidateId,
+        url,
+        source: 'custom',
+        label: 'Własny URL',
+        assessed: false,
+        reachable: false,
+      };
+      row.allCandidates.push(newCand);
+      row.selectedId = candidateId;
+      row.customUrl = '';
+
+      try {
+        const r = await fetch('/api/logos/assess', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: [{ candidate_id: candidateId, company: row.company, url }] }),
+        });
+        const data = await r.json();
+        if (data.assessments?.[0]) {
+          const idx = row.allCandidates.findIndex(c => c.id === candidateId);
+          if (idx !== -1) {
+            row.allCandidates[idx] = { ...row.allCandidates[idx], ...data.assessments[0], assessed: true };
+          }
+        }
+      } catch (e) {
+        const idx = row.allCandidates.findIndex(c => c.id === candidateId);
+        if (idx !== -1) {
+          row.allCandidates[idx] = { ...row.allCandidates[idx], assessed: true, reachable: false };
+        }
+      }
+    },
+
+    goToExport() {
+      this.step = 4;
+    },
+
+    badgeClass(label) {
+      const map = {
+        Excellent: 'badge-excellent',
+        Good: 'badge-good',
+        Fair: 'badge-fair',
+        Poor: 'badge-poor',
+        Bad: 'badge-bad',
+      };
+      return 'badge ' + (map[label] || 'badge-bad');
+    },
+
+    async downloadZip() {
+      this.exporting = true;
+      try {
+        const selections = this.exportItems.map(i => ({ company: i.company, url: i.url }));
+        const r = await fetch('/api/export/zip', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ selections }),
+        });
+        const blob = await r.blob();
+        this._triggerDownload(blob, 'logos.zip');
+      } catch (e) {
+        alert('Błąd podczas pobierania ZIP.');
+      }
+      this.exporting = false;
+    },
+
+    async downloadPptx() {
+      this.exporting = true;
+      try {
+        const selections = this.exportItems.map(i => ({ company: i.company, url: i.url }));
+        const r = await fetch('/api/export/pptx', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ selections, logo_width_cm: parseFloat(this.logoWidthCm) }),
+        });
+        const blob = await r.blob();
+        this._triggerDownload(blob, 'logos.pptx');
+      } catch (e) {
+        alert('Błąd podczas pobierania PPTX.');
+      }
+      this.exporting = false;
+    },
+
+    _triggerDownload(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    },
+  };
+}
+</script>
+</body>
+</html>
