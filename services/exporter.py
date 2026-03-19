@@ -121,7 +121,8 @@ async def _fetch_one(client: httpx.AsyncClient, item: dict) -> tuple[dict, bytes
     return item, None
 
 
-async def build_pptx(selections: list[dict], logo_width_cm: float = 5.0) -> io.BytesIO:
+async def build_pptx(selections: list[dict], logo_width_cm: float = 5.0,
+                     show_labels: bool = True) -> io.BytesIO:
     # Download all images in parallel
     async with httpx.AsyncClient(headers=HEADERS) as client:
         tasks = [_fetch_one(client, item) for item in selections]
@@ -159,40 +160,43 @@ async def build_pptx(selections: list[dict], logo_width_cm: float = 5.0) -> io.B
     cols = math.ceil(math.sqrt(n))
     rows = math.ceil(n / cols)
 
-    margin_x = Cm(1.0)
-    margin_y = Cm(0.8)
-    label_h = Cm(0.8)
+    # Generous outer margins — leave room for slide "border/frame" space
+    margin_x = Cm(2.5)
+    margin_y = Cm(2.0)
+    label_h = Cm(0.75) if show_labels else 0
+    cell_gap = Cm(0.4)   # gap between cells
 
     usable_w = prs.slide_width - margin_x * 2
     usable_h = prs.slide_height - margin_y * 2
-    cell_w = int(usable_w / cols)
-    cell_h = int(usable_h / rows)
+    cell_w = int((usable_w - cell_gap * (cols - 1)) / cols)
+    cell_h = int((usable_h - cell_gap * (rows - 1)) / rows)
 
     for idx, (item, png_bytes, ratio) in enumerate(items_with_png):
         col = idx % cols
         row = idx // cols
 
-        cell_left = int(margin_x + col * cell_w)
-        cell_top = int(margin_y + row * cell_h)
+        cell_left = int(margin_x + col * (cell_w + cell_gap))
+        cell_top = int(margin_y + row * (cell_h + cell_gap))
 
-        # Company name label at bottom of cell
-        try:
-            lbl = slide.shapes.add_textbox(
-                cell_left, cell_top + cell_h - label_h, cell_w, label_h
-            )
-            tf = lbl.text_frame
-            tf.word_wrap = True
-            tf.text = item["company"]
-            para = tf.paragraphs[0]
-            para.alignment = PP_ALIGN.CENTER
-            para.runs[0].font.size = Pt(9)
-        except Exception as e:
-            logger.warning("PPTX: label failed for %s: %s", item["company"], e)
+        # Company name label at bottom of cell (optional)
+        if show_labels:
+            try:
+                lbl = slide.shapes.add_textbox(
+                    cell_left, cell_top + cell_h - int(label_h), cell_w, int(label_h)
+                )
+                tf = lbl.text_frame
+                tf.word_wrap = True
+                tf.text = item["company"]
+                para = tf.paragraphs[0]
+                para.alignment = PP_ALIGN.CENTER
+                para.runs[0].font.size = Pt(9)
+            except Exception as e:
+                logger.warning("PPTX: label failed for %s: %s", item["company"], e)
 
-        # Logo image — fit within cell above label
+        # Logo image — centered within cell, above label
         try:
-            img_area_h = cell_h - int(label_h) - Cm(0.2)
-            img_area_w = cell_w - Cm(0.4)
+            img_area_h = cell_h - int(label_h) - Cm(0.15)
+            img_area_w = cell_w - Cm(0.3)
 
             logo_w = min(Cm(logo_width_cm), int(img_area_w))
             logo_h = int(logo_w * ratio)
@@ -200,7 +204,6 @@ async def build_pptx(selections: list[dict], logo_width_cm: float = 5.0) -> io.B
                 logo_h = int(img_area_h)
                 logo_w = int(logo_h / ratio) if ratio > 0 else logo_w
 
-            # Ensure positive dimensions
             logo_w = max(logo_w, Cm(0.5))
             logo_h = max(logo_h, Cm(0.5))
 

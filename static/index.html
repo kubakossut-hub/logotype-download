@@ -459,7 +459,7 @@
         <div class="export-card">
           <div class="export-icon">📊</div>
           <h3>Pobierz PPTX</h3>
-          <p>Prezentacja PowerPoint — jedno logo na slajd z nazwą firmy.</p>
+          <p>Prezentacja PowerPoint — wszystkie logotypy na jednym slajdzie.</p>
           <div>
             <select class="size-select" x-model="logoWidthCm">
               <option value="3">Małe (3 cm)</option>
@@ -468,7 +468,11 @@
               <option value="12">Bardzo duże (12 cm)</option>
             </select>
           </div>
-          <button class="btn btn-success" @click="downloadPptx()" :disabled="exporting">
+          <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:.85rem;cursor:pointer;color:#374151;">
+            <input type="checkbox" x-model="pptxShowLabels" style="width:15px;height:15px;cursor:pointer;">
+            Dodaj nazwy firm pod logotypami
+          </label>
+          <button class="btn btn-success" @click="downloadPptx()" :disabled="exporting" style="margin-top:14px">
             <span x-show="!exporting">Pobierz PPTX</span>
             <span x-show="exporting">Pobieranie...</span>
           </button>
@@ -488,6 +492,7 @@ function app() {
     progressText: '',
     progressPct: 0,
     logoWidthCm: '5',
+    pptxShowLabels: true,
     exporting: false,
 
     init() {},
@@ -685,7 +690,7 @@ function app() {
         const r = await fetch('/api/export/pptx', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ selections, logo_width_cm: parseFloat(this.logoWidthCm) }),
+          body: JSON.stringify({ selections, logo_width_cm: parseFloat(this.logoWidthCm), show_labels: this.pptxShowLabels }),
         });
         const blob = await r.blob();
         this._triggerDownload(blob, 'logos.pptx');
