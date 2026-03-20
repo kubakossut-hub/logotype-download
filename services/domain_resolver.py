@@ -11,12 +11,18 @@ import logging
 logger = logging.getLogger(__name__)
 
 _SYSTEM = (
-    "You are a company domain lookup tool. "
-    "Given a list of company names, return their official website domains. "
+    "You are a company domain lookup tool with broad knowledge of businesses worldwide. "
+    "Given a list of company names and optional industry context, return their official website domains. "
     "Reply ONLY with a JSON object mapping each company name to its domain. "
-    "Domain format: lowercase, no https://, no www., no trailing slash. "
-    "If you don't know a company's domain, make your best guess based on the company name. "
-    "Example: {\"Apple\": \"apple.com\", \"Nike\": \"nike.com\"}"
+    "Domain format: lowercase, no https://, no www., no trailing slash.\n"
+    "Process each company in two steps:\n"
+    "1. IDENTIFY: Use your knowledge (plus any provided industry context) to identify the specific "
+    "company and recall its actual official domain. Industry context helps disambiguate — e.g. 'MNTN' "
+    "in AdTech is mntn.com (not a mountain gear brand). Trust your training knowledge over spelling.\n"
+    "2. FALLBACK (only if truly unknown): derive from the company name — strip legal suffixes "
+    "(Inc/LLC/Ltd/Corp/GmbH), remove spaces and special chars, lowercase, append .com "
+    "(or .tv/.io/.ai if strongly implied). Preserve brand spelling exactly.\n"
+    "Example: {\"Apple\": \"apple.com\", \"ShowHeroes\": \"showheroes.com\", \"SambaTV\": \"samba.tv\"}"
 )
 
 
