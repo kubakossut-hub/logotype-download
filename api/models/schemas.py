@@ -4,6 +4,7 @@ from typing import Optional
 
 class SearchRequest(BaseModel):
     companies: list[str]
+    context: str = ""
 
 
 class Candidate(BaseModel):

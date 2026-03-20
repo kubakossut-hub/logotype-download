@@ -1,5 +1,7 @@
 import logging
 import os
+from dotenv import load_dotenv
+load_dotenv()  # loads .env if present (local dev); on Railway use env vars in dashboard
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse

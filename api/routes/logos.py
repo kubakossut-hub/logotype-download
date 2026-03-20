@@ -8,7 +8,7 @@ router = APIRouter()
 
 @router.post("/search", response_model=SearchResponse)
 async def search_logos(request: SearchRequest):
-    results = await generate_all(request.companies)
+    results = await generate_all(request.companies, context=request.context)
     return {"results": results}
 
 

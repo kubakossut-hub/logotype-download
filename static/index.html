@@ -331,6 +331,16 @@
         x-model="companiesText"
         placeholder="Apple&#10;Nike&#10;Stripe&#10;OpenAI&#10;Spotify"
       ></textarea>
+      <div style="margin-top:14px;">
+        <label style="display:block;font-size:.8rem;font-weight:600;color:#6b7280;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em;">Branża / kontekst (opcjonalnie)</label>
+        <input
+          type="text"
+          x-model="contextText"
+          placeholder="np. CTV AdTech, e-commerce, SaaS B2B…"
+          style="width:100%;padding:8px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:.9rem;outline:none;box-sizing:border-box;"
+        />
+        <p style="font-size:.78rem;color:#9ca3af;margin-top:4px;">Pomaga AI lepiej rozpoznać domeny firm z danej branży.</p>
+      </div>
       <div style="margin-top:16px; display:flex; gap:10px; align-items:center;">
         <button class="btn btn-primary" @click="startSearch()" :disabled="!companiesText.trim()">
           <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -487,6 +497,7 @@ function app() {
   return {
     step: 1,
     companiesText: '',
+    contextText: '',
     results: [],
     loadingMsg: '',
     progressText: '',
@@ -534,7 +545,7 @@ function app() {
           const r = await fetch('/api/logos/search', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ companies: batch }),
+            body: JSON.stringify({ companies: batch, context: this.contextText }),
           });
           const data = await r.json();
           const mapped = data.results.map(r => ({

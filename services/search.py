@@ -6,6 +6,9 @@ from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup, Tag
 import copy as _copy
 
+# Global semaphore — caps total simultaneous HTTP requests across all scrapes
+_HTTP_SEM = asyncio.Semaphore(25)
+
 LEGAL_SUFFIXES = r"\b(inc|llc|ltd|corp|co|gmbh|s\.a\.|plc|ag|bv|nv|oy|ab|as|a/s|pty|pvt)\b\.?"
 
 HEADERS = {
@@ -199,27 +202,28 @@ def _redirect_ok(original_url: str, final_url: str, brand: str) -> bool:
 
 async def _try_fetch(url: str, client: httpx.AsyncClient,
                      brand: str = "") -> tuple[str | None, str | None]:
-    try:
-        r = await client.get(url, timeout=5.0, follow_redirects=True, headers=HEADERS)
-        ct = r.headers.get("content-type", "")
-        if "text/html" not in ct:
-            return None, None
-        if r.status_code not in (200, 403):
-            return None, None
-        if r.status_code == 403 and len(r.text) < 2000:
-            return None, None
-        # Reject if redirected to unrelated domain
-        if not _redirect_ok(url, str(r.url), brand):
-            return None, None
-        # Reject parked pages
-        if _is_parked(r.text):
-            return None, None
-        # Reject near-empty pages (redirects to blank SPA shells, placeholder sites)
-        if len(r.text) < 500:
-            return None, None
-        return r.text, str(r.url)
-    except Exception:
-        pass
+    async with _HTTP_SEM:
+        try:
+            r = await client.get(url, timeout=6.0, follow_redirects=True, headers=HEADERS)
+            ct = r.headers.get("content-type", "")
+            if "text/html" not in ct:
+                return None, None
+            if r.status_code not in (200, 403):
+                return None, None
+            if r.status_code == 403 and len(r.text) < 2000:
+                return None, None
+            # Reject if redirected to unrelated domain
+            if not _redirect_ok(url, str(r.url), brand):
+                return None, None
+            # Reject parked pages
+            if _is_parked(r.text):
+                return None, None
+            # Reject near-empty pages (bot-detection shells, placeholders)
+            if len(r.text) < 500:
+                return None, None
+            return r.text, str(r.url)
+        except Exception:
+            pass
     return None, None
 
 
@@ -274,20 +278,28 @@ async def _fetch_html(domain: str, client: httpx.AsyncClient,
 def _is_domain(text: str) -> bool:
     """Return True if text looks like a ready-made domain (e.g. 'tcl.com', 'www.apple.com')."""
     t = text.lower().strip().removeprefix("https://").removeprefix("http://").split("/")[0]
-    # Has at least one dot and known TLD-like suffix, no spaces
     return bool(re.match(r'^[\w\-]+(\.[\w\-]+)+$', t))
 
 
-async def scrape_logos(company: str, client: httpx.AsyncClient) -> tuple[str, list[dict]]:
-    # If the input already looks like a domain, use it directly
-    if _is_domain(company):
+async def scrape_logos(company: str, client: httpx.AsyncClient,
+                       domain: str | None = None) -> tuple[str, list[dict]]:
+    """Scrape logos for a company. `domain` is pre-resolved (e.g. by Claude)."""
+    slug = _to_slug(company)
+
+    # Resolve domain
+    if domain:
+        # Already resolved (e.g. by Claude)
+        domain = (domain.lower()
+                  .removeprefix("https://").removeprefix("http://")
+                  .removeprefix("www.").rstrip("/").split("/")[0])
+        brand = domain.split(".")[0]
+    elif _is_domain(company):
         raw = company.lower().strip().removeprefix("https://").removeprefix("http://").split("/")[0]
         domain = raw.removeprefix("www.")
         brand = domain.split(".")[0]
     else:
         domain = _guess_domain(company)
         brand = _clean_brand(company)
-    slug = _to_slug(company)
 
     seen: set[str] = set()
     candidates: list[dict] = []
@@ -419,18 +431,24 @@ async def scrape_logos(company: str, client: httpx.AsyncClient) -> tuple[str, li
     return domain, result
 
 
-async def generate_all(companies: list[str]) -> list[dict]:
-    sem = asyncio.Semaphore(8)  # max 8 sites scraped simultaneously
+async def generate_all(companies: list[str], context: str = "") -> list[dict]:
+    from services.domain_resolver import resolve_domains
 
-    async def _limited(company: str, client: httpx.AsyncClient):
-        async with sem:
-            return await scrape_logos(company, client)
-
-    limits = httpx.Limits(max_connections=40, max_keepalive_connections=10)
     valid = [c.strip() for c in companies if c.strip()]
 
+    # Step 1: resolve all domains via Claude (one batch call)
+    domain_map = await resolve_domains(valid, context=context)
+
+    # Step 2: scrape all sites (max 8 concurrent, shared HTTP semaphore caps total requests)
+    scrape_sem = asyncio.Semaphore(8)
+    limits = httpx.Limits(max_connections=60, max_keepalive_connections=15)
+
+    async def _scrape(company: str, client: httpx.AsyncClient):
+        async with scrape_sem:
+            return await scrape_logos(company, client, domain=domain_map.get(company))
+
     async with httpx.AsyncClient(limits=limits) as client:
-        tasks = [_limited(c, client) for c in valid]
+        tasks = [_scrape(c, client) for c in valid]
         results = await asyncio.gather(*tasks)
 
     return [
