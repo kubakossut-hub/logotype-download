@@ -42,7 +42,11 @@ def _clean_brand(company: str) -> str:
 
 
 def _guess_domain(company: str) -> str:
-    return f"{_clean_brand(company)}.com"
+    brand = _clean_brand(company)
+    # If company name ends with "tv", try .tv first (SambaTV → samba.tv)
+    if brand.endswith("tv") and len(brand) > 2:
+        return f"{brand[:-2]}.tv"
+    return f"{brand}.com"
 
 
 def _to_slug(company: str) -> str:
@@ -303,6 +307,11 @@ async def scrape_logos(company: str, client: httpx.AsyncClient) -> tuple[str, li
                 break
 
     # ── Strategy 2: Elements with "logo" or "brand" in class/id ────────
+    SKIP_WORDS = {"partner", "client", "customer", "sponsor", "trust",
+                  "testimonial", "marquee", "ticker", "scrolling", "carousel",
+                  "slider", "logo-section", "logos-section", "logo-wall",
+                  "logo-grid", "logo-bar", "logo-strip", "logo-row"}
+
     logo_els = soup.select(
         '[class*="logo"], [class*="brand"], '
         '[id*="logo"], [id*="brand"]'
@@ -311,15 +320,50 @@ async def scrape_logos(company: str, client: httpx.AsyncClient) -> tuple[str, li
         cls = " ".join(el.get("class", [])).lower()
         iid = (el.get("id") or "").lower()
         tag_text = cls + " " + iid
-        if any(skip in tag_text for skip in ("product", "category", "partner", "client",
-                                              "footer", "customer", "sponsor", "award",
-                                              "trust", "carousel", "slider", "testimonial",
-                                              "marquee", "ticker", "gallery", "grid")):
+        if any(skip in tag_text for skip in SKIP_WORDS):
+            continue
+        # Also check ancestors (up to 4 levels) for client-logo sections
+        skip_ancestor = False
+        parent = el.parent
+        for _ in range(10):
+            if parent is None or not isinstance(parent, Tag):
+                break
+            p_cls = " ".join(parent.get("class", [])).lower()
+            p_id = (parent.get("id") or "").lower()
+            ancestor_text = p_cls + " " + p_id
+            if any(skip in ancestor_text for skip in SKIP_WORDS):
+                skip_ancestor = True
+                break
+            parent = parent.parent
+        if skip_ancestor:
             continue
         for url, label in _extract_image_from_tag(el, soup, base_url):
             add(url, label, 100)
 
-    # ── Strategy 3: Any <img> with "logo" in src/alt/class/id ───────────
+    # ── Strategy 3: og:image / twitter:image (high priority — always relevant) ─
+    for prop in ["og:image", "og:logo", "twitter:image"]:
+        tag = soup.find("meta", property=prop) or soup.find("meta", attrs={"name": prop})
+        if tag and tag.get("content"):
+            url = _normalize(tag["content"], base_url)
+            add(url, f"Meta ({prop})", 95)
+
+    # ── Strategy 4: Favicons (reliable fallback) ─────────────────────────
+    for link_tag in soup.find_all("link", rel=True):
+        rels = link_tag.get("rel", [])
+        if isinstance(rels, str):
+            rels = [rels]
+        rels_str = " ".join(rels).lower()
+        if "apple-touch-icon" in rels_str:
+            url = _normalize(link_tag.get("href"), base_url)
+            add(url, "Apple Touch Icon", 85)
+        elif "icon" in rels_str:
+            href = link_tag.get("href", "")
+            # Prefer SVG/PNG favicons, deprioritize .ico
+            prio = 80 if (".svg" in href.lower() or ".png" in href.lower()) else 50
+            url = _normalize(href, base_url)
+            add(url, "Favicon", prio)
+
+    # ── Strategy 5: Any <img> with "logo" in src/alt/class/id ───────────
     for img in soup.find_all("img", limit=200):
         src = _get_img_src(img) or ""
         alt = img.get("alt") or ""
@@ -330,33 +374,13 @@ async def scrape_logos(company: str, client: httpx.AsyncClient) -> tuple[str, li
             url = _normalize(src, base_url)
             add(url, alt or iid or "Logo", 70)
 
-    # ── Strategy 4: Any URL (href/src) with "logo" in path ──────────────
+    # ── Strategy 6: Any URL (href/src) with "logo" in path ──────────────
     for tag in soup.find_all(True, limit=500):
         for attr in ("href", "src", "data-src", "data", "content"):
             val = tag.get(attr) or ""
             if _has_logo_word(val) and re.search(r'\.(svg|png|jpg|jpeg|webp)(\?|$)', val, re.I):
                 url = _normalize(val, base_url)
                 add(url, "Logo file", 65)
-
-    # ── Strategy 5: og:image / twitter:image ─────────────────────────────
-    for prop in ["og:image", "og:logo", "twitter:image"]:
-        tag = soup.find("meta", property=prop) or soup.find("meta", attrs={"name": prop})
-        if tag and tag.get("content"):
-            url = _normalize(tag["content"], base_url)
-            add(url, f"Meta ({prop})", 40)
-
-    # ── Strategy 6: Favicons ─────────────────────────────────────────────
-    for link_tag in soup.find_all("link", rel=True):
-        rels = link_tag.get("rel", [])
-        if isinstance(rels, str):
-            rels = [rels]
-        rels_str = " ".join(rels).lower()
-        if "apple-touch-icon" in rels_str:
-            url = _normalize(link_tag.get("href"), base_url)
-            add(url, "Apple Touch Icon", 30)
-        elif "icon" in rels_str:
-            url = _normalize(link_tag.get("href"), base_url)
-            add(url, "Favicon", 20)
 
     # Sort by priority desc, keep top N
     candidates.sort(key=lambda c: c["priority"], reverse=True)

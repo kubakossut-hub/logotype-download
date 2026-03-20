@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
                   "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "image/*,*/*;q=0.8",
+    "Sec-Fetch-Dest": "image",
+    "Sec-Fetch-Mode": "no-cors",
+    "Sec-Fetch-Site": "cross-site",
 }
 
 
@@ -51,17 +55,17 @@ def _detect_extension(content_type: str, image_bytes: bytes) -> str:
 
 async def build_zip(selections: list[dict]) -> io.BytesIO:
     async with httpx.AsyncClient(headers=HEADERS) as client:
-        tasks = [client.get(item["url"], timeout=10.0, follow_redirects=True) for item in selections]
-        responses = await asyncio.gather(*tasks, return_exceptions=True)
+        tasks = [_fetch_one(client, item) for item in selections]
+        results = await asyncio.gather(*tasks)
 
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        for item, resp in zip(selections, responses):
-            if isinstance(resp, Exception) or resp.status_code != 200:
+        for item, raw in results:
+            if not raw:
                 continue
-            ext = _detect_extension(resp.headers.get("content-type", ""), resp.content)
+            ext = _detect_extension("", raw)
             filename = _sanitize_filename(item["company"]) + ext
-            zf.writestr(filename, resp.content)
+            zf.writestr(filename, raw)
 
     buffer.seek(0)
     return buffer

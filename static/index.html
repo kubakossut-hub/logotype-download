@@ -598,7 +598,7 @@ function app() {
       for (const row of this.results) {
         const idx = row.allCandidates.findIndex(c => c.id === a.candidate_id);
         if (idx !== -1) {
-          row.allCandidates[idx] = { ...row.allCandidates[idx], ...a, assessed: true };
+          Object.assign(row.allCandidates[idx], a, { assessed: true });
           return;
         }
       }
@@ -614,8 +614,12 @@ function app() {
 
     async addCustom(rowIdx) {
       const row = this.results[rowIdx];
-      const url = (row.customUrl || '').trim();
+      let url = (row.customUrl || '').trim();
       if (!url) return;
+      // Auto-add https:// if missing
+      if (!/^https?:\/\//i.test(url) && !url.startsWith('data:')) {
+        url = 'https://' + url;
+      }
 
       const candidateId = `custom_${rowIdx}_${Date.now()}`;
       const newCand = {
@@ -625,6 +629,7 @@ function app() {
         label: 'Własny URL',
         assessed: false,
         reachable: false,
+        thumbnail_b64: null,
       };
       row.allCandidates.push(newCand);
       row.selectedId = candidateId;
@@ -640,13 +645,13 @@ function app() {
         if (data.assessments?.[0]) {
           const idx = row.allCandidates.findIndex(c => c.id === candidateId);
           if (idx !== -1) {
-            row.allCandidates[idx] = { ...row.allCandidates[idx], ...data.assessments[0], assessed: true };
+            Object.assign(row.allCandidates[idx], data.assessments[0], { assessed: true });
           }
         }
       } catch (e) {
         const idx = row.allCandidates.findIndex(c => c.id === candidateId);
         if (idx !== -1) {
-          row.allCandidates[idx] = { ...row.allCandidates[idx], assessed: true, reachable: false };
+          Object.assign(row.allCandidates[idx], { assessed: true, reachable: false });
         }
       }
     },
