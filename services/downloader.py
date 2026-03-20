@@ -9,7 +9,8 @@ HEADERS = {
     "Accept": "image/*,*/*;q=0.8",
 }
 
-SEM = asyncio.Semaphore(10)
+SEM = asyncio.Semaphore(12)
+_LIMITS = httpx.Limits(max_connections=20, max_keepalive_connections=5)
 
 
 def _decode_data_uri(url: str) -> bytes | None:
@@ -48,7 +49,7 @@ async def fetch_and_assess(client: httpx.AsyncClient, candidate_id: str, company
 
 
 async def assess_all(items: list[dict]) -> list[dict]:
-    async with httpx.AsyncClient(headers=HEADERS) as client:
+    async with httpx.AsyncClient(headers=HEADERS, limits=_LIMITS) as client:
         tasks = [
             fetch_and_assess(client, item["candidate_id"], item["company"], item["url"])
             for item in items

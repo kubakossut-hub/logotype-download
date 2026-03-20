@@ -523,28 +523,34 @@ function app() {
       this.progressPct = 5;
       this.progressText = '';
 
-      // Step 1: get candidate URLs
-      let searchRes;
-      try {
-        const r = await fetch('/api/logos/search', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ companies: lines }),
-        });
-        searchRes = await r.json();
-      } catch (e) {
-        alert('Błąd połączenia z serwerem.');
-        this.step = 1;
-        return;
+      // Step 1: get candidate URLs — batches of 10 to avoid server timeout
+      this.results = [];
+      const SEARCH_BATCH = 10;
+      for (let i = 0; i < lines.length; i += SEARCH_BATCH) {
+        const batch = lines.slice(i, i + SEARCH_BATCH);
+        this.loadingMsg = `Szukam logo… (${Math.min(i + SEARCH_BATCH, lines.length)} / ${lines.length})`;
+        this.progressPct = 5 + Math.round((i / lines.length) * 30);
+        try {
+          const r = await fetch('/api/logos/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ companies: batch }),
+          });
+          const data = await r.json();
+          const mapped = data.results.map(r => ({
+            company: r.company,
+            domain_guess: r.domain_guess,
+            allCandidates: r.candidates.map(c => ({ ...c, assessed: false, reachable: false })),
+            selectedId: null,
+            customUrl: '',
+          }));
+          this.results.push(...mapped);
+        } catch (e) {
+          alert('Błąd połączenia z serwerem.');
+          this.step = 1;
+          return;
+        }
       }
-
-      this.results = searchRes.results.map(r => ({
-        company: r.company,
-        domain_guess: r.domain_guess,
-        allCandidates: r.candidates.map(c => ({ ...c, assessed: false, reachable: false })),
-        selectedId: null,
-        customUrl: '',
-      }));
 
       // Step 2: assess all candidates
       const totalCandidates = this.results.reduce((s, r) => s + r.allCandidates.length, 0);

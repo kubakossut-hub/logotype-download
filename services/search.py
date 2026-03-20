@@ -394,13 +394,20 @@ async def scrape_logos(company: str, client: httpx.AsyncClient) -> tuple[str, li
 
 
 async def generate_all(companies: list[str]) -> list[dict]:
-    async with httpx.AsyncClient() as client:
-        tasks = [scrape_logos(c.strip(), client) for c in companies if c.strip()]
+    sem = asyncio.Semaphore(8)  # max 8 sites scraped simultaneously
+
+    async def _limited(company: str, client: httpx.AsyncClient):
+        async with sem:
+            return await scrape_logos(company, client)
+
+    limits = httpx.Limits(max_connections=40, max_keepalive_connections=10)
+    valid = [c.strip() for c in companies if c.strip()]
+
+    async with httpx.AsyncClient(limits=limits) as client:
+        tasks = [_limited(c, client) for c in valid]
         results = await asyncio.gather(*tasks)
 
     return [
-        {"company": c.strip(), "domain_guess": domain, "candidates": candidates}
-        for c, (domain, candidates) in zip(
-            [c for c in companies if c.strip()], results
-        )
+        {"company": c, "domain_guess": domain, "candidates": candidates}
+        for c, (domain, candidates) in zip(valid, results)
     ]
