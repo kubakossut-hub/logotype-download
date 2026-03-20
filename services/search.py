@@ -276,11 +276,6 @@ async def scrape_logos(company: str, client: httpx.AsyncClient) -> tuple[str, li
     slug = _to_slug(company)
     brand = _clean_brand(company)
 
-    html, base_url = await _fetch_html(domain, client, brand)
-    if not html:
-        return domain, []
-
-    soup = BeautifulSoup(html, "html.parser")
     seen: set[str] = set()
     candidates: list[dict] = []
 
@@ -289,6 +284,24 @@ async def scrape_logos(company: str, client: httpx.AsyncClient) -> tuple[str, li
             return
         seen.add(url)
         candidates.append({"url": url, "label": label[:60], "priority": priority})
+
+    # ── Always-available fallbacks (work even if site is unreachable) ────
+    add(f"https://www.google.com/s2/favicons?domain={domain}&sz=128",
+        "Google Favicon (128px)", 10)
+    add(f"https://icons.duckduckgo.com/ip3/{domain}.ico",
+        "DuckDuckGo Icon", 5)
+
+    html, base_url = await _fetch_html(domain, client, brand)
+    if not html:
+        # Sort and return just the fallbacks
+        candidates.sort(key=lambda c: c["priority"], reverse=True)
+        result = [
+            {"id": f"{slug}_{i}", "url": c["url"], "source": "fallback", "label": c["label"]}
+            for i, c in enumerate(candidates)
+        ]
+        return domain, result
+
+    soup = BeautifulSoup(html, "html.parser")
 
     # ── Strategy 1: First <a> in <header> or <nav> (highest priority) ───
     for container_tag in ("header", "nav"):
