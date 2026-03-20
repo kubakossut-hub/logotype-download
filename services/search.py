@@ -271,10 +271,23 @@ async def _fetch_html(domain: str, client: httpx.AsyncClient,
     return None, None
 
 
+def _is_domain(text: str) -> bool:
+    """Return True if text looks like a ready-made domain (e.g. 'tcl.com', 'www.apple.com')."""
+    t = text.lower().strip().removeprefix("https://").removeprefix("http://").split("/")[0]
+    # Has at least one dot and known TLD-like suffix, no spaces
+    return bool(re.match(r'^[\w\-]+(\.[\w\-]+)+$', t))
+
+
 async def scrape_logos(company: str, client: httpx.AsyncClient) -> tuple[str, list[dict]]:
-    domain = _guess_domain(company)
+    # If the input already looks like a domain, use it directly
+    if _is_domain(company):
+        raw = company.lower().strip().removeprefix("https://").removeprefix("http://").split("/")[0]
+        domain = raw.removeprefix("www.")
+        brand = domain.split(".")[0]
+    else:
+        domain = _guess_domain(company)
+        brand = _clean_brand(company)
     slug = _to_slug(company)
-    brand = _clean_brand(company)
 
     seen: set[str] = set()
     candidates: list[dict] = []
