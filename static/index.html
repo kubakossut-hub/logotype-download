@@ -677,7 +677,6 @@ function app() {
             row.allCandidates.push({ ...c, id: newId, assessed: false, reachable: false, thumbnail_b64: null });
             newIds.push({ candidate_id: newId, company: row.company, url: c.url });
           }
-          if (newIds.length) row.selectedId = newIds[0].candidate_id;
           const ar = await fetch('/api/logos/assess', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -686,6 +685,14 @@ function app() {
           const aData = await ar.json();
           for (const a of (aData.assessments || [])) {
             this._applyAssessment(a);
+          }
+          // Auto-select best reachable among the newly added candidates
+          const newReachable = row.allCandidates.filter(c => newIds.some(n => n.candidate_id === c.id) && c.reachable);
+          if (newReachable.length) {
+            const best = newReachable.reduce((a, b) => (b.quality_score > a.quality_score ? b : a));
+            row.selectedId = best.id;
+          } else if (newIds.length) {
+            row.selectedId = newIds[0].candidate_id;
           }
         } catch (e) {
           const pidx = row.allCandidates.findIndex(c => c.id === placeholderId);

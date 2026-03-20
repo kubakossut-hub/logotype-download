@@ -436,10 +436,24 @@ async def generate_all(companies: list[str], context: str = "") -> list[dict]:
 
     valid = [c.strip() for c in companies if c.strip()]
 
-    # Step 1: resolve all domains via Claude (one batch call)
-    domain_map = await resolve_domains(valid, context=context)
+    # Step 1: pre-resolve inputs that are already domains (e.g. 'tcl.com', 'www.stripe.com')
+    # These bypass Claude entirely — no need to guess what we already know.
+    pre_resolved: dict[str, str] = {}
+    to_resolve: list[str] = []
+    for c in valid:
+        if _is_domain(c):
+            d = (c.lower()
+                 .removeprefix("https://").removeprefix("http://")
+                 .split("/")[0].removeprefix("www."))
+            pre_resolved[c] = d
+        else:
+            to_resolve.append(c)
 
-    # Step 2: scrape all sites (max 8 concurrent, shared HTTP semaphore caps total requests)
+    # Step 2: resolve remaining company names via Claude (one batch call)
+    domain_map = await resolve_domains(to_resolve, context=context) if to_resolve else {}
+    domain_map.update(pre_resolved)
+
+    # Step 3: scrape all sites (max 8 concurrent, shared HTTP semaphore caps total requests)
     scrape_sem = asyncio.Semaphore(8)
     limits = httpx.Limits(max_connections=60, max_keepalive_connections=15)
 
